@@ -4313,7 +4313,7 @@
         if (routeOriginHasFix) {
           searchParams.set("lat", String(routeOrigin.lat));
           searchParams.set("lon", String(routeOrigin.lon));
-          searchParams.set("radiusKm", "28");
+          searchParams.set("radiusKm", "5");
         }
         const response = await fetch(`${API_ORIGIN}/api/maps/search?${searchParams.toString()}`);
         const payload = await response.json().catch(() => ({}));
