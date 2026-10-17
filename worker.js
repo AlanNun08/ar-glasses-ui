@@ -536,7 +536,9 @@ async function handleMapsRoute(request, env) {
   let response = null;
   let payload = null;
   for (const routeBase of routeBases) {
-    const profile = routeBase.includes("routed-foot") ? "driving" : "driving";
+    // The routed-foot instance is configured for the OSRM "foot" profile;
+    // the public OSRM demo endpoint uses its documented "driving" profile.
+    const profile = routeBase.includes("routing.openstreetmap.de/routed-foot") ? "foot" : "driving";
     const routeUrl = new URL(`${routeBase}/${profile}/${origin.lon},${origin.lat};${destination.lon},${destination.lat}`);
     routeUrl.searchParams.set("alternatives", "false");
     routeUrl.searchParams.set("steps", "true");
