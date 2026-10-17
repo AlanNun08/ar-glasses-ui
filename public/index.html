@@ -8869,7 +8869,10 @@
     }
 
     function loadActiveWidgets() {
-      const defaults = ["spotify", "reminders", "ai"];
+      // On a phone held upright, prioritize navigation over entertainment.
+      const defaults = getViewportMode() === "portrait"
+        ? ["maps", "reminders", "ai"]
+        : ["spotify", "reminders", "ai"];
       try {
         const raw = window.localStorage.getItem(ACTIVE_WIDGETS_KEY);
         if (!raw) {
