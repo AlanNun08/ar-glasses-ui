@@ -1,0 +1,963 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  />
+  <title>AR Widgets</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #000;
+      --glass: rgba(255, 255, 255, 0.1);
+      --glass-strong: rgba(255, 255, 255, 0.13);
+      --stroke: rgba(255, 255, 255, 0.24);
+      --stroke-strong: rgba(255, 255, 255, 0.34);
+      --text: rgba(255, 255, 255, 0.98);
+      --muted: rgba(255, 255, 255, 0.84);
+      --shadow: rgba(0, 0, 0, 0.34);
+      --good: #90f7c4;
+      --warm: #ffd28d;
+      --accent: #7bd6ff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "SF Pro Display", "Segoe UI", Helvetica, Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    .shell {
+      position: relative;
+      min-height: 100dvh;
+      isolation: isolate;
+      padding:
+        max(24px, env(safe-area-inset-top))
+        max(24px, env(safe-area-inset-right))
+        max(24px, env(safe-area-inset-bottom))
+        max(24px, env(safe-area-inset-left));
+      background: none;
+    }
+
+    .shell::before {
+      content: none;
+    }
+
+    .shell::after {
+      content: none;
+    }
+
+    .widget {
+      position: absolute;
+      z-index: 1;
+      touch-action: none;
+      user-select: none;
+    }
+
+    .widget.dragging {
+      z-index: 2;
+      box-shadow:
+        0 28px 46px -20px rgba(0, 0, 0, 0.42),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    }
+
+    .glass {
+      position: relative;
+      border: 1px solid var(--stroke);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.19), rgba(255, 255, 255, 0.08));
+      box-shadow:
+        0 20px 42px -22px rgba(2, 2, 10, 0.86),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18);
+      -webkit-backdrop-filter: blur(14px) saturate(116%);
+      backdrop-filter: blur(14px) saturate(116%);
+    }
+
+    .glass::after {
+      content: "";
+      position: absolute;
+      inset: 1px;
+      border-radius: inherit;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), transparent 42%);
+      pointer-events: none;
+    }
+
+    .panel {
+      border-radius: 20px;
+      padding: 13px 14px;
+      min-width: 220px;
+      max-width: min(52vw, 560px);
+      overflow: hidden;
+    }
+
+    .panel h2,
+    .card h3 {
+      margin: 0;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .widget-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .widget-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .drag-handle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.06);
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 0.66rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: grab;
+      flex: 0 0 auto;
+    }
+
+    .drag-handle:active {
+      cursor: grabbing;
+    }
+
+    .resize-handle {
+      position: absolute;
+      left: 8px;
+      bottom: 8px;
+      width: 22px;
+      height: 22px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(255, 255, 255, 0.7);
+      cursor: nesw-resize;
+      z-index: 2;
+    }
+
+    .resize-handle::before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border-left: 2px solid rgba(255, 255, 255, 0.75);
+      border-bottom: 2px solid rgba(255, 255, 255, 0.75);
+      transform: rotate(0deg);
+    }
+
+    .drag-dots {
+      display: inline-grid;
+      grid-template-columns: repeat(2, 4px);
+      gap: 3px;
+    }
+
+    .drag-dots span {
+      width: 4px;
+      height: 4px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.58);
+    }
+
+    .clock-panel {
+      min-width: min(100%, 240px);
+    }
+
+    .time {
+      margin-top: 8px;
+      font-size: clamp(2rem, 3.2vw, 2.8rem);
+      font-weight: 760;
+      line-height: 0.98;
+      letter-spacing: -0.04em;
+    }
+
+    .date {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .status-panel {
+      min-width: min(100%, 240px);
+      max-width: 320px;
+    }
+
+    .status-line {
+      margin-top: 6px;
+      font-size: 0.84rem;
+      line-height: 1.35;
+      color: rgba(255, 255, 255, 0.9);
+    }
+
+    .status-line strong {
+      color: var(--good);
+      font-weight: 700;
+    }
+
+    .card {
+      min-height: 124px;
+      border-radius: 20px;
+      padding: 13px 14px;
+    }
+
+    .meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .meta span {
+      font-size: 0.74rem;
+      color: var(--muted);
+    }
+
+    .meta-tight {
+      margin-bottom: 10px;
+    }
+
+    .hint {
+      margin-top: 8px;
+      margin-bottom: 14px;
+      font-size: 0.74rem;
+      line-height: 1.3;
+      color: rgba(255, 255, 255, 0.64);
+    }
+
+    .value {
+      font-size: clamp(1.45rem, 2.2vw, 1.9rem);
+      font-weight: 760;
+      line-height: 1.08;
+      letter-spacing: -0.04em;
+    }
+
+    .sub {
+      margin-top: 5px;
+      font-size: 0.82rem;
+      line-height: 1.34;
+      color: var(--muted);
+    }
+
+    .todo-list,
+    .agenda-list {
+      margin: 10px 0 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 7px;
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 0.84rem;
+    }
+
+    .todo-list li,
+    .agenda-list li {
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+    }
+
+    .todo-list li::before,
+    .agenda-list li::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      margin-top: 0.45em;
+      background: var(--accent);
+      flex: 0 0 auto;
+      box-shadow: 0 0 10px rgba(123, 214, 255, 0.35);
+    }
+
+    .agenda-list .timechip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 54px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      color: var(--warm);
+      font-size: 0.68rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .actions {
+      position: fixed;
+      left: 50%;
+      bottom: max(18px, env(safe-area-inset-bottom));
+      transform: translateX(-50%) translateY(24px);
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      width: min(calc(100% - 30px), 420px);
+      padding: 10px 12px;
+      border-radius: 999px;
+      opacity: 0;
+      pointer-events: none;
+      transition:
+        opacity 180ms ease,
+        transform 180ms ease;
+      z-index: 3;
+    }
+
+    body.show-controls .actions,
+    .actions:focus-within {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+      pointer-events: auto;
+    }
+
+    .actions-label {
+      flex: 1;
+      padding-left: 4px;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      appearance: none;
+      border: 1px solid var(--stroke-strong);
+      background: rgba(255, 255, 255, 0.14);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 9px 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition:
+        transform 120ms ease,
+        background 120ms ease,
+        border-color 120ms ease;
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+      border-color: rgba(255, 255, 255, 0.42);
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .btn.secondary {
+      color: rgba(255, 255, 255, 0.85);
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .dialog-backdrop {
+      position: fixed;
+      inset: 0;
+      display: none;
+      place-items: center;
+      padding: 20px;
+      background: rgba(0, 0, 0, 0.22);
+      z-index: 5;
+    }
+
+    .dialog-backdrop.open {
+      display: grid;
+    }
+
+    .dialog {
+      width: min(100%, 380px);
+      border-radius: 22px;
+      padding: 18px;
+    }
+
+    .dialog p {
+      margin: 10px 0 16px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+    }
+
+    .field label {
+      font-size: 0.9rem;
+      color: rgba(255, 255, 255, 0.86);
+    }
+
+    .field input {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 1px solid var(--stroke);
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      outline: none;
+    }
+
+    .field input:focus {
+      border-color: rgba(123, 214, 255, 0.5);
+      box-shadow: 0 0 0 3px rgba(123, 214, 255, 0.12);
+    }
+
+    .dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    @media (max-width: 720px) {
+      html,
+      body {
+        overflow: auto;
+      }
+
+      .shell {
+        min-height: auto;
+      }
+
+      .widget {
+        position: static;
+        width: auto;
+      }
+
+      .shell {
+        display: grid;
+        gap: 12px;
+      }
+
+      .actions {
+        position: static;
+        width: 100%;
+        transform: none;
+        opacity: 1;
+        pointer-events: auto;
+        border-radius: 22px;
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .actions-label {
+        padding-left: 2px;
+      }
+
+      .button-row {
+        justify-content: flex-start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell" aria-label="AR widget dashboard">
+    <section class="widget glass panel clock-panel" id="widget-clock-1" data-widget="clock-1" aria-labelledby="clock-label-1">
+      <div class="widget-head">
+        <div class="widget-kicker">
+          <h2 id="clock-label-1">Local Time</h2>
+        </div>
+        <button class="drag-handle" type="button" data-drag-handle aria-label="Drag Local Time widget 1">
+          <span class="drag-dots" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+          Move
+        </button>
+      </div>
+      <section>
+        <div class="time" data-clock-time>--:--</div>
+        <div class="date" data-clock-date>Loading date</div>
+      </section>
+      <button class="resize-handle" type="button" data-resize-handle aria-label="Resize Local Time widget 1"></button>
+    </section>
+
+    <section class="widget glass panel clock-panel" id="widget-clock-2" data-widget="clock-2" aria-labelledby="clock-label-2">
+      <div class="widget-head">
+        <div class="widget-kicker">
+          <h2 id="clock-label-2">Local Time</h2>
+        </div>
+        <button class="drag-handle" type="button" data-drag-handle aria-label="Drag Local Time widget 2">
+          <span class="drag-dots" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+          Move
+        </button>
+      </div>
+      <section>
+        <div class="time" data-clock-time>--:--</div>
+        <div class="date" data-clock-date>Loading date</div>
+      </section>
+      <button class="resize-handle" type="button" data-resize-handle aria-label="Resize Local Time widget 2"></button>
+    </section>
+
+    <section class="widget glass panel clock-panel" id="widget-clock-3" data-widget="clock-3" aria-labelledby="clock-label-3">
+      <div class="widget-head">
+        <div class="widget-kicker">
+          <h2 id="clock-label-3">Local Time</h2>
+        </div>
+        <button class="drag-handle" type="button" data-drag-handle aria-label="Drag Local Time widget 3">
+          <span class="drag-dots" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+          Move
+        </button>
+      </div>
+      <section>
+        <div class="time" data-clock-time>--:--</div>
+        <div class="date" data-clock-date>Loading date</div>
+      </section>
+      <button class="resize-handle" type="button" data-resize-handle aria-label="Resize Local Time widget 3"></button>
+    </section>
+
+    <section class="widget glass panel clock-panel" id="widget-clock-4" data-widget="clock-4" aria-labelledby="clock-label-4">
+      <div class="widget-head">
+        <div class="widget-kicker">
+          <h2 id="clock-label-4">Local Time</h2>
+        </div>
+        <button class="drag-handle" type="button" data-drag-handle aria-label="Drag Local Time widget 4">
+          <span class="drag-dots" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+          Move
+        </button>
+      </div>
+      <section>
+        <div class="time" data-clock-time>--:--</div>
+        <div class="date" data-clock-date>Loading date</div>
+      </section>
+      <button class="resize-handle" type="button" data-resize-handle aria-label="Resize Local Time widget 4"></button>
+    </section>
+
+    <section class="widget glass panel clock-panel" id="widget-clock-5" data-widget="clock-5" aria-labelledby="clock-label-5">
+      <div class="widget-head">
+        <div class="widget-kicker">
+          <h2 id="clock-label-5">Local Time</h2>
+        </div>
+        <button class="drag-handle" type="button" data-drag-handle aria-label="Drag Local Time widget 5">
+          <span class="drag-dots" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+          Move
+        </button>
+      </div>
+      <section>
+        <div class="time" data-clock-time>--:--</div>
+        <div class="date" data-clock-date>Loading date</div>
+      </section>
+      <button class="resize-handle" type="button" data-resize-handle aria-label="Resize Local Time widget 5"></button>
+    </section>
+  </main>
+
+  <section class="glass actions" aria-label="Controls">
+    <div class="actions-label">Move and resize your Local Time widgets.</div>
+    <div class="button-row">
+      <button class="btn secondary" id="reset-layout-btn" type="button">Reset Layout</button>
+    </div>
+  </section>
+  <script>
+    const resetLayoutBtn = document.getElementById("reset-layout-btn");
+    const shellEl = document.querySelector(".shell");
+    const widgets = Array.from(document.querySelectorAll("[data-widget]"));
+    const clockDisplays = widgets.map((widget) => ({
+      timeEl: widget.querySelector("[data-clock-time]"),
+      dateEl: widget.querySelector("[data-clock-date]")
+    }));
+    const compactLayout = window.matchMedia("(max-width: 720px)");
+    const layoutStorageKey = "ar-widgets-layout-v5";
+    let controlsTimer = 0;
+    let dragState = null;
+    let resizeState = null;
+
+    function clamp(value, min, max) {
+      return Math.min(Math.max(value, min), max);
+    }
+
+    function isCompactLayout() {
+      return compactLayout.matches;
+    }
+
+    function getShellMetrics() {
+      const rect = shellEl.getBoundingClientRect();
+      const style = window.getComputedStyle(shellEl);
+      const paddingLeft = parseFloat(style.paddingLeft) || 0;
+      const paddingRight = parseFloat(style.paddingRight) || 0;
+      const paddingTop = parseFloat(style.paddingTop) || 0;
+      const paddingBottom = parseFloat(style.paddingBottom) || 0;
+
+      return {
+        originLeft: rect.left + paddingLeft,
+        originTop: rect.top + paddingTop,
+        width: Math.max(0, rect.width - paddingLeft - paddingRight),
+        height: Math.max(0, rect.height - paddingTop - paddingBottom)
+      };
+    }
+
+    function clearWidgetSize(widget) {
+      widget.style.width = "";
+      widget.style.height = "";
+      widget.dataset.width = "";
+      widget.dataset.height = "";
+    }
+
+    function sizeWidget(widget, width, height) {
+      const metrics = getShellMetrics();
+      const minWidth = 220;
+      const minHeight = 120;
+      const maxWidth = Math.max(minWidth, metrics.width);
+      const maxHeight = Math.max(minHeight, metrics.height);
+      const nextWidth = clamp(Math.round(width), minWidth, maxWidth);
+      const nextHeight = clamp(Math.round(height), minHeight, maxHeight);
+
+      widget.style.width = `${nextWidth}px`;
+      widget.style.height = `${nextHeight}px`;
+      widget.dataset.width = String(nextWidth);
+      widget.dataset.height = String(nextHeight);
+    }
+
+    function getDefaultLayout() {
+      const shellBounds = getShellMetrics();
+      const gap = 24;
+      const rowHeight = 170;
+      const result = {};
+
+      widgets.forEach((widget, index) => {
+        const key = widget.dataset.widget;
+        const width = widget.offsetWidth || 280;
+        const height = widget.offsetHeight || 140;
+        const column = index % 2;
+        const row = Math.floor(index / 2);
+        const x = column === 0
+          ? gap
+          : Math.max(gap, shellBounds.width - width - gap);
+        const y = gap + (row * Math.max(rowHeight, height + 10));
+        result[key] = { x, y };
+      });
+
+      return result;
+    }
+
+    function readSavedLayout() {
+      try {
+        return JSON.parse(window.localStorage.getItem(layoutStorageKey) || "{}");
+      } catch {
+        return {};
+      }
+    }
+
+    function saveLayout() {
+      if (isCompactLayout()) {
+        return;
+      }
+
+      const layout = {};
+      widgets.forEach((widget) => {
+        layout[widget.dataset.widget] = {
+          x: Number(widget.dataset.x || 0),
+          y: Number(widget.dataset.y || 0),
+          width: Number(widget.dataset.width || 0),
+          height: Number(widget.dataset.height || 0)
+        };
+      });
+      window.localStorage.setItem(layoutStorageKey, JSON.stringify(layout));
+    }
+
+    function positionWidget(widget, x, y) {
+      const shellBounds = getShellMetrics();
+      const maxX = Math.max(0, shellBounds.width - widget.offsetWidth);
+      const maxY = Math.max(0, shellBounds.height - widget.offsetHeight);
+      const nextX = clamp(Math.round(x), 0, maxX);
+      const nextY = clamp(Math.round(y), 0, maxY);
+
+      widget.style.left = `${nextX}px`;
+      widget.style.top = `${nextY}px`;
+      widget.dataset.x = String(nextX);
+      widget.dataset.y = String(nextY);
+    }
+
+    function applyLayout(useDefaults) {
+      if (isCompactLayout()) {
+        widgets.forEach((widget) => {
+          widget.style.left = "";
+          widget.style.top = "";
+          widget.dataset.x = "";
+          widget.dataset.y = "";
+        });
+        return;
+      }
+
+      const saved = useDefaults ? {} : readSavedLayout();
+      widgets.forEach((widget) => {
+        const nextSize = saved[widget.dataset.widget];
+        if (nextSize && nextSize.width && nextSize.height) {
+          sizeWidget(widget, nextSize.width, nextSize.height);
+        } else {
+          clearWidgetSize(widget);
+        }
+      });
+
+      const defaults = getDefaultLayout();
+      widgets.forEach((widget) => {
+        const key = widget.dataset.widget;
+        const source = saved[key] || defaults[key] || { x: 24, y: 24 };
+        positionWidget(widget, source.x, source.y);
+      });
+
+      if (useDefaults) {
+        saveLayout();
+      }
+    }
+
+    function finishDrag(savePosition) {
+      if (!dragState) {
+        return;
+      }
+
+      dragState.widget.classList.remove("dragging");
+      if (savePosition) {
+        saveLayout();
+      }
+      dragState = null;
+      scheduleControlsHide();
+    }
+
+    function startDrag(event) {
+      if (isCompactLayout()) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const handle = event.currentTarget;
+      const widget = handle.closest("[data-widget]");
+      if (!widget) {
+        return;
+      }
+
+      if (dragState && dragState.widget === widget) {
+        finishDrag(true);
+        return;
+      }
+
+      if (dragState) {
+        finishDrag(true);
+      }
+
+      if (resizeState) {
+        finishResize(true);
+      }
+
+      dragState = {
+        widget,
+        startPointerX: event.clientX,
+        startPointerY: event.clientY,
+        startLeft: Number(widget.dataset.x || 0),
+        startTop: Number(widget.dataset.y || 0)
+      };
+
+      widget.classList.add("dragging");
+      revealControls();
+    }
+
+    function onPointerMove(event) {
+      if (!dragState) {
+        return;
+      }
+
+      const dx = event.clientX - dragState.startPointerX;
+      const dy = event.clientY - dragState.startPointerY;
+      const x = dragState.startLeft + dx;
+      const y = dragState.startTop + dy;
+      positionWidget(dragState.widget, x, y);
+    }
+
+    function finishResize(savePosition) {
+      if (!resizeState) {
+        return;
+      }
+
+      resizeState.widget.classList.remove("dragging");
+      if (savePosition) {
+        saveLayout();
+      }
+      resizeState = null;
+      scheduleControlsHide();
+    }
+
+    function startResize(event) {
+      if (isCompactLayout()) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const handle = event.currentTarget;
+      const widget = handle.closest("[data-widget]");
+      if (!widget) {
+        return;
+      }
+
+      if (dragState) {
+        finishDrag(true);
+      }
+
+      if (resizeState) {
+        finishResize(true);
+      }
+
+      resizeState = {
+        widget,
+        startX: event.clientX,
+        startY: event.clientY,
+        startWidth: widget.offsetWidth,
+        startHeight: widget.offsetHeight,
+        startLeft: Number(widget.dataset.x || 0),
+        startTop: Number(widget.dataset.y || 0)
+      };
+
+      widget.classList.add("dragging");
+      revealControls();
+    }
+
+    function onResizeMove(event) {
+      if (!resizeState) {
+        return;
+      }
+
+      const width = resizeState.startWidth + (resizeState.startX - event.clientX);
+      const height = resizeState.startHeight + (event.clientY - resizeState.startY);
+      sizeWidget(resizeState.widget, width, height);
+      const nextX = resizeState.startLeft + (resizeState.startWidth - resizeState.widget.offsetWidth);
+      positionWidget(resizeState.widget, nextX, resizeState.startTop);
+    }
+
+    function scheduleControlsHide() {
+      window.clearTimeout(controlsTimer);
+      controlsTimer = window.setTimeout(() => {
+        document.body.classList.remove("show-controls");
+      }, 2600);
+    }
+
+    function revealControls() {
+      document.body.classList.add("show-controls");
+      scheduleControlsHide();
+    }
+
+    function handlePointerMove(event) {
+      revealControls();
+      onPointerMove(event);
+      onResizeMove(event);
+    }
+
+    function updateClock() {
+      const now = new Date();
+      const timeText = now.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+      const dateText = now.toLocaleDateString([], {
+        weekday: "long",
+        month: "short",
+        day: "numeric"
+      });
+
+      clockDisplays.forEach((display) => {
+        if (display.timeEl) {
+          display.timeEl.textContent = timeText;
+        }
+        if (display.dateEl) {
+          display.dateEl.textContent = dateText;
+        }
+      });
+    }
+
+    resetLayoutBtn.addEventListener("click", () => {
+      window.localStorage.removeItem(layoutStorageKey);
+      applyLayout(true);
+      revealControls();
+    });
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("touchstart", revealControls, { passive: true });
+    window.addEventListener("pointerup", () => {
+      if (resizeState) {
+        finishResize(true);
+      }
+      if (dragState) {
+        finishDrag(true);
+      }
+    });
+    window.addEventListener("pointercancel", () => {
+      if (resizeState) {
+        finishResize(true);
+      }
+      if (dragState) {
+        finishDrag(true);
+      }
+    });
+    window.addEventListener("resize", () => applyLayout(false));
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && dragState) {
+        finishDrag(true);
+        return;
+      }
+      if (event.key === "Escape" && resizeState) {
+        finishResize(true);
+        return;
+      }
+      revealControls();
+    });
+
+    compactLayout.addEventListener("change", () => applyLayout(false));
+    widgets.forEach((widget) => {
+      const handle = widget.querySelector("[data-drag-handle]");
+      const resizeHandle = widget.querySelector("[data-resize-handle]");
+      if (handle) {
+        handle.addEventListener("pointerdown", startDrag);
+      }
+      if (resizeHandle) {
+        resizeHandle.addEventListener("pointerdown", startResize);
+      }
+    });
+
+    updateClock();
+    applyLayout(false);
+    document.body.classList.add("show-controls");
+    scheduleControlsHide();
+    setInterval(updateClock, 1000);
+  </script>
+</body>
+</html>

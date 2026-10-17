@@ -1,0 +1,15 @@
+name = "ar-walking-hud-sample"
+main = "worker.js"
+compatibility_date = "2026-04-03"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[vars]
+SPOTIFY_CLIENT_ID = "ca1b443e070d47419aab5708dd495e19"
+SPOTIFY_REDIRECT_URI = "https://ar-walking-hud-sample.npmnorth.workers.dev/"
+OPENAI_CHAT_MODEL = "gpt-4.1-mini"
+OPENAI_TRANSCRIBE_MODEL = "gpt-4o-mini-transcribe"
+OPENAI_TTS_MODEL = "gpt-4o-mini-tts"
+OPENAI_TTS_VOICE = "coral"
