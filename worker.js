@@ -379,7 +379,7 @@ async function handleMapsSearch(request, env, url) {
     lat: url.searchParams.get("lat"),
     lon: url.searchParams.get("lon")
   });
-  const radiusKmRaw = Number.parseFloat(url.searchParams.get("radiusKm") || "25");
+  const radiusKmRaw = Number.parseFloat(url.searchParams.get("radiusKm") || "5");
   const radiusKm = Number.isFinite(radiusKmRaw) ? Math.min(Math.max(radiusKmRaw, 2), 40) : 25;
   const fetchedLists = [];
 
