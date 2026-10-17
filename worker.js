@@ -536,7 +536,7 @@ async function handleMapsRoute(request, env) {
   let response = null;
   let payload = null;
   for (const routeBase of routeBases) {
-    const routeUrl = new URL(`${routeBase}/foot/${origin.lon},${origin.lat};${destination.lon},${destination.lat}`);
+    const routeUrl = new URL(`${routeBase}/driving/${origin.lon},${origin.lat};${destination.lon},${destination.lat}`);
     routeUrl.searchParams.set("alternatives", "false");
     routeUrl.searchParams.set("steps", "true");
     routeUrl.searchParams.set("overview", "full");
