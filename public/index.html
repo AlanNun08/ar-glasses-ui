@@ -4306,6 +4306,15 @@
       setMapsSearchOverlayOpen(true);
       try {
         await ensureRouteOrigin();
+        if (!routeOriginHasFix) {
+          mapsSearchResults = [];
+          mapsSearchEmptyMessage = "Enable location access to find nearby places.";
+          renderMapsSearchResults();
+          setMapsSearchOverlayOpen(true);
+          setMapsSearchOverlayCopy("Nearby search needs your current location. Allow location access, then try again.");
+          setMapsRouteStatus("Location required for nearby search.");
+          return;
+        }
         const searchParams = new URLSearchParams({
           q: query,
           limit: "8"
