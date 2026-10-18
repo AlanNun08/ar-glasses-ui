@@ -3092,6 +3092,7 @@
           <input id="maps-search-input" class="spotify-search-input" type="search" autocomplete="off" placeholder="Search destination to see nearby matches" />
           <button class="control" type="button" id="maps-search-btn">Route</button>
           <button class="control voice-search-btn" type="button" id="maps-voice-btn" aria-label="Voice search destinations" title="Search destinations by voice">🎙</button>
+          <button class="control" type="button" id="maps-location-btn" title="Request phone location permission">Locate me</button>
         </div>
         <div class="maps-route-status" id="maps-route-status">Choose a preset or search a destination.</div>
       </div>
@@ -10311,6 +10312,28 @@
       setActiveDockApp("maps");
       scheduleMapsViewportSync(true);
       setMapsRouteStatus(`Following ${getCurrentMapRoute().label}.`);
+    });
+    document.getElementById("maps-location-btn")?.addEventListener("click", async () => {
+      const button = document.getElementById("maps-location-btn");
+      if (!window.isSecureContext) {
+        setMapsRouteStatus("Location requires the HTTPS website. Open the deployed workers.dev URL, not a local file or insecure page.");
+        return;
+      }
+      if (!("geolocation" in navigator)) {
+        setMapsRouteStatus("This browser does not provide location services. Check your phone settings or try another browser.");
+        return;
+      }
+      if (button) { button.disabled = true; button.textContent = "Locating…"; }
+      setMapsRouteStatus("Requesting location permission from your phone…");
+      try {
+        routeOriginHasFix = false;
+        await ensureRouteOrigin();
+        if (routeOriginHasFix) {
+          setMapsRouteStatus("Location found. You can now search nearby destinations.");
+        }
+      } finally {
+        if (button) { button.disabled = false; button.textContent = "Locate me"; }
+      }
     });
     mapsSearchBtnEl?.addEventListener("click", runMapsDestinationSearch);
     mapsSearchInputEl?.addEventListener("input", () => {
