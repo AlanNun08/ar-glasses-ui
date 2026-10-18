@@ -4404,34 +4404,72 @@
     }
 
     async function routeToSearchResult(result) {
-      if (!result) {
+      if (!result) return;
+
+      const origin = await ensureRouteOrigin();
+      if (!routeOriginHasFix) {
+        setMapsRouteStatus("Share your location to get walking directions.");
         return;
       }
-      setMapsRouteStatus("Building walking route...");
+
+      openWidget("maps", "right");
+      setMapsRouteStatus("Getting walking directions...");
+
+      const googleMapsUrl = new URL("https://www.google.com/maps/dir/");
+      googleMapsUrl.searchParams.set("api", "1");
+      googleMapsUrl.searchParams.set("origin", `${origin.lat},${origin.lon}`);
+      googleMapsUrl.searchParams.set("destination", `${result.lat},${result.lon}`);
+      googleMapsUrl.searchParams.set("travelmode", "walking");
+
+      const osmUrl = new URL("https://www.openstreetmap.org/directions");
+      osmUrl.searchParams.set("engine", "fossgis_osrm_foot");
+      osmUrl.searchParams.set("route", `${origin.lat},${origin.lon};${result.lat},${result.lon}`);
+
+      const showExternalDirections = (message) => {
+        if (!mapsRouteStatusEl) return;
+        mapsRouteStatusEl.textContent = "";
+        const status = document.createElement("div");
+        status.textContent = message;
+        mapsRouteStatusEl.appendChild(status);
+
+        const addLink = (url, label) => {
+          const link = document.createElement("a");
+          link.href = url.toString();
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = label;
+          link.style.display = "inline-block";
+          link.style.margin = "8px 12px 0 0";
+          link.style.textDecoration = "underline";
+          link.style.pointerEvents = "auto";
+          link.style.position = "relative";
+          link.style.zIndex = "5";
+          mapsRouteStatusEl.appendChild(link);
+        };
+        addLink(googleMapsUrl, "Walking directions in Google Maps");
+        addLink(osmUrl, "Walking directions in OpenStreetMap");
+      };
+
       try {
-        const origin = await ensureRouteOrigin();
-        if (!routeOriginHasFix) {
-          setMapsRouteStatus("Share your location to build a route from where you are.");
-          return;
-        }
-        openWidget("maps", "right");
         const response = await fetch(`${API_ORIGIN}/api/maps/route`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             origin,
-            destination: {
-              name: result.name,
-              lat: result.lat,
-              lon: result.lon
-            }
+            destination: { name: result.name, lat: result.lat, lon: result.lon }
           })
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
-          throw new Error(payload.error || `Route failed (${response.status})`);
+          throw new Error(payload.error || `Route request failed (${response.status}).`);
         }
-        customMapRoute = buildRouteFromApiResult(payload);
+
+        const route = buildRouteFromApiResult(payload);
+        if (!Array.isArray(route.geometry) || route.geometry.length < 2) {
+          throw new Error("The routing service returned no usable route geometry.");
+        }
+
+        customMapRoute = route;
         mapsSearchResults = [];
         mapsSearchEmptyMessage = "Search for another place to see nearby matches.";
         renderMapsSearchResults();
@@ -4441,38 +4479,8 @@
         scheduleMapsViewportSync(true);
         setMapsRouteStatus(`Following route to ${result.name}.`);
       } catch (error) {
-        setMapsRouteStatus(error.message || "Route request failed.");
-
-        // Keep the user moving when the in-HUD routing provider is unavailable.
-        // This link is created only after the user selects a destination.
-        if (mapsRouteStatusEl && routeOriginHasFix) {
-          const googleMapsUrl = new URL("https://www.google.com/maps/dir/");
-          googleMapsUrl.searchParams.set("api", "1");
-          googleMapsUrl.searchParams.set("origin", `${routeOrigin.lat},${routeOrigin.lon}`);
-          googleMapsUrl.searchParams.set("destination", `${result.lat},${result.lon}`);
-          googleMapsUrl.searchParams.set("travelmode", "walking");
-
-          const osmUrl = new URL("https://www.openstreetmap.org/directions");
-          osmUrl.searchParams.set("engine", "fossgis_osrm_foot");
-          osmUrl.searchParams.set("route", `${routeOrigin.lat},${routeOrigin.lon};${result.lat},${result.lon}`);
-
-          const appendDirectionsLink = (url, label) => {
-            const link = document.createElement("a");
-            link.href = url.toString();
-            link.target = "_blank";
-            link.rel = "noopener noreferrer";
-            link.textContent = label;
-            link.style.display = "inline-block";
-            link.style.marginTop = "6px";
-            link.style.marginRight = "10px";
-            link.style.textDecoration = "underline";
-            mapsRouteStatusEl.appendChild(document.createTextNode(" "));
-            mapsRouteStatusEl.appendChild(link);
-          };
-
-          appendDirectionsLink(googleMapsUrl, "Open walking directions in Google Maps");
-          appendDirectionsLink(osmUrl, "Try OpenStreetMap directions");
-        }
+        console.warn("[maps-ui] embedded route unavailable; showing external directions", error);
+        showExternalDirections(`In-HUD routing is unavailable right now for ${result.name}. Use one of these walking directions instead.`);
       }
     }
 
