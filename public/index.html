@@ -3044,7 +3044,7 @@
         <span id="hud-time">--:--</span>
         <span id="hud-link">Link --</span>
         <span id="hud-batt">Batt --%</span>
-        <button class="control ring-mode-toggle" type="button" id="ring-mode-toggle" aria-pressed="false" title="Optimize layout for mobile ring mouse">Ring Mouse: Off</button>
+        <button class="control ring-mode-toggle" type="button" id="ring-mode-toggle" aria-pressed="false" title="Toggle the mobile layout for a ring mouse. This does not report Bluetooth connection status.">Ring Layout: Off</button>
       </div>
     </header>
 
@@ -8972,10 +8972,10 @@
       hudEl?.classList.toggle("ring-mouse-mode", active);
       if (ringModeToggleEl) {
         ringModeToggleEl.setAttribute("aria-pressed", active ? "true" : "false");
-        ringModeToggleEl.textContent = active ? "Ring Mouse: On" : "Ring Mouse: Off";
+        ringModeToggleEl.textContent = active ? "Ring Layout: On" : "Ring Layout: Off";
         ringModeToggleEl.title = active
-          ? "Turn off the mobile ring-mouse layout"
-          : "Use a scrollable mobile layout with larger pointer targets";
+          ? "Turn off the mobile ring-mouse layout. Bluetooth connection is managed by your phone."
+          : "Use a scrollable mobile layout with larger pointer targets. Bluetooth connection is managed by your phone.";
       }
       if (persist) {
         try {
