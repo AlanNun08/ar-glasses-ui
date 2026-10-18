@@ -528,41 +528,55 @@ async function handleMapsRoute(request, env) {
   const configuredRouteBase = typeof env.OSRM_BASE_URL === "string" && env.OSRM_BASE_URL.trim()
     ? env.OSRM_BASE_URL.trim().replace(/\/+$/, "")
     : OSRM_ROUTE_BASE;
-  // The public OSRM demo server may reject requests from some edge locations.
-  // Retry with the OpenStreetMap foot-routing service if the primary is blocked.
-  const routeBases = configuredRouteBase === OSRM_ROUTE_BASE
-    ? [configuredRouteBase, "https://routing.openstreetmap.de/routed-foot/route/v1"]
-    : [configuredRouteBase];
-  let response = null;
+
+  // Try the configured provider first, then the public foot-routing instance.
+  // Each provider has its own profile name; do not reuse a profile across hosts.
+  const providers = [
+    { base: configuredRouteBase, profile: "driving" },
+    ...(configuredRouteBase === OSRM_ROUTE_BASE
+      ? [{ base: "https://routing.openstreetmap.de/routed-foot/route/v1", profile: "driving" }]
+      : [])
+  ];
   let payload = null;
-  for (const routeBase of routeBases) {
-    // OSRM-compatible route endpoints use "driving" in the URL profile slot;
-    // the routed-foot host selects its walking network at the service level.
-    const profile = "driving";
-    const routeUrl = new URL(`${routeBase}/${profile}/${origin.lon},${origin.lat};${destination.lon},${destination.lat}`);
+  let lastStatus = 502;
+  let lastMessage = "No routing provider responded.";
+
+  for (const provider of providers) {
+    const routeUrl = new URL(
+      `${provider.base}/${provider.profile}/${origin.lon},${origin.lat};${destination.lon},${destination.lat}`
+    );
     routeUrl.searchParams.set("alternatives", "false");
     routeUrl.searchParams.set("steps", "true");
     routeUrl.searchParams.set("overview", "full");
     routeUrl.searchParams.set("geometries", "geojson");
+
     try {
-      response = await fetch(routeUrl.toString(), {
+      const response = await fetch(routeUrl.toString(), {
         headers: { Accept: "application/json" }
       });
-      payload = await safeJson(response);
+      const candidate = await safeJson(response);
+      if (response.ok && candidate?.code === "Ok") {
+        payload = candidate;
+        break;
+      }
+      lastStatus = response.status || 502;
+      lastMessage = candidate?.message || candidate?.error || `Routing provider returned HTTP ${lastStatus}.`;
+      // Continue to the backup after blocked/rate-limited/server-error responses.
+      if (response.status !== 403 && response.status !== 429 && response.status < 500) {
+        break;
+      }
     } catch {
-      response = null;
-      payload = null;
-    }
-    if (response?.ok && payload?.code === "Ok") {
-      break;
-    }
-    if (routeBase !== routeBases[routeBases.length - 1] && response && response.status < 500 && response.status !== 403) {
-      break;
+      lastStatus = 502;
+      lastMessage = "Could not connect to a routing provider.";
     }
   }
-  if (!response?.ok || payload?.code !== "Ok") {
-    const message = payload?.message || payload?.error || `Routing failed (${response?.status || "network error"}). Try again shortly.`;
-    return json({ error: message }, response ? (response.ok ? 502 : response.status) : 502);
+
+  if (!payload) {
+    return json({
+      error: `Walking directions are temporarily unavailable (${lastStatus}). Open the destination in your maps app instead.`,
+      fallbackUrl: buildAppleMapsUrl(origin, destination, false),
+      webUrl: buildAppleMapsUrl(origin, destination, true)
+    }, 502);
   }
 
   const route = Array.isArray(payload?.routes) ? payload.routes[0] : null;
