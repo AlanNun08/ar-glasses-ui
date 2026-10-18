@@ -525,64 +525,108 @@ async function handleMapsRoute(request, env) {
     return json({ error: "origin and destination coordinates are required." }, 400);
   }
 
-  const configuredRouteBase = typeof env.OSRM_BASE_URL === "string" && env.OSRM_BASE_URL.trim()
-    ? env.OSRM_BASE_URL.trim().replace(/\/+$/, "")
-    : OSRM_ROUTE_BASE;
-
-  // Try the configured provider first, then the public foot-routing instance.
-  // Each provider has its own profile name; do not reuse a profile across hosts.
-  const providers = [
-    { base: configuredRouteBase, profile: "driving" },
-    ...(configuredRouteBase === OSRM_ROUTE_BASE
-      ? [{ base: "https://routing.openstreetmap.de/routed-foot/route/v1", profile: "driving" }]
-      : [])
-  ];
   let payload = null;
   let lastStatus = 502;
   let lastMessage = "No routing provider responded.";
 
-  for (const provider of providers) {
-    const routeUrl = new URL(
-      `${provider.base}/${provider.profile}/${origin.lon},${origin.lat};${destination.lon},${destination.lat}`
-    );
-    routeUrl.searchParams.set("alternatives", "false");
-    routeUrl.searchParams.set("steps", "true");
-    routeUrl.searchParams.set("overview", "full");
-    routeUrl.searchParams.set("geometries", "geojson");
-
-    try {
-      const response = await fetch(routeUrl.toString(), {
-        headers: { Accept: "application/json" }
+  // Try Valhalla's public pedestrian router first. It supports walking routes
+  // without an API key and can return an OSRM-compatible response format.
+  try {
+    const response = await fetch("https://valhalla1.openstreetmap.de/route", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "X-Client-Id": "ar-glasses-ui"
+      },
+      body: JSON.stringify({
+        locations: [
+          { lat: origin.lat, lon: origin.lon, type: "break" },
+          { lat: destination.lat, lon: destination.lon, type: "break" }
+        ],
+        costing: "pedestrian",
+        units: "kilometers",
+        language: "en-US",
+        format: "osrm"
+      })
+    });
+    const candidate = await safeJson(response);
+    const candidateRoute = Array.isArray(candidate?.routes) ? candidate.routes[0] : null;
+    const candidateGeometry = candidateRoute?.geometry?.coordinates;
+    if (response.ok && candidate?.code === "Ok" && Array.isArray(candidateGeometry) && candidateGeometry.length >= 2) {
+      payload = candidate;
+      console.log("[maps-route] Valhalla pedestrian route succeeded", {
+        httpStatus: response.status,
+        routeCount: candidate.routes.length
       });
-      const candidate = await safeJson(response);
-      if (response.ok && candidate?.code === "Ok") {
-        console.log("[maps-route] provider succeeded", {
-          host: new URL(provider.base).host,
-          httpStatus: response.status,
-          routeCount: Array.isArray(candidate.routes) ? candidate.routes.length : 0
-        });
-        payload = candidate;
-        break;
-      }
+    } else {
       lastStatus = response.status || 502;
-      lastMessage = candidate?.message || candidate?.error || `Routing provider returned HTTP ${lastStatus}.`;
-      console.warn("[maps-route] provider failed", {
-        host: new URL(provider.base).host,
+      lastMessage = candidate?.error || candidate?.status_message || candidate?.message || `Valhalla returned HTTP ${lastStatus}.`;
+      console.warn("[maps-route] Valhalla failed", {
         httpStatus: lastStatus,
-        providerCode: candidate?.code || null,
+        providerCode: candidate?.code || candidate?.status || null,
         message: String(lastMessage).slice(0, 240)
       });
-      // Continue to the backup after blocked/rate-limited/server-error responses.
-      if (response.status !== 403 && response.status !== 429 && response.status < 500) {
-        break;
+    }
+  } catch (error) {
+    lastStatus = 502;
+    lastMessage = "Could not connect to the Valhalla routing service.";
+    console.warn("[maps-route] Valhalla connection failed", {
+      error: String(error?.message || error).slice(0, 240)
+    });
+  }
+
+  // Retain the existing public OSRM providers as backups.
+  if (!payload) {
+    const configuredRouteBase = typeof env.OSRM_BASE_URL === "string" && env.OSRM_BASE_URL.trim()
+      ? env.OSRM_BASE_URL.trim().replace(/\\/+$/, "")
+      : OSRM_ROUTE_BASE;
+    const providers = [
+      { base: configuredRouteBase, profile: "driving" },
+      ...(configuredRouteBase === OSRM_ROUTE_BASE
+        ? [{ base: "https://routing.openstreetmap.de/routed-foot/route/v1", profile: "driving" }]
+        : [])
+    ];
+
+    for (const provider of providers) {
+      const routeUrl = new URL(
+        `${provider.base}/${provider.profile}/${origin.lon},${origin.lat};${destination.lon},${destination.lat}`
+      );
+      routeUrl.searchParams.set("alternatives", "false");
+      routeUrl.searchParams.set("steps", "true");
+      routeUrl.searchParams.set("overview", "full");
+      routeUrl.searchParams.set("geometries", "geojson");
+
+      try {
+        const response = await fetch(routeUrl.toString(), {
+          headers: { Accept: "application/json" }
+        });
+        const candidate = await safeJson(response);
+        const candidateGeometry = candidate?.routes?.[0]?.geometry?.coordinates;
+        if (response.ok && candidate?.code === "Ok" && Array.isArray(candidateGeometry) && candidateGeometry.length >= 2) {
+          payload = candidate;
+          console.log("[maps-route] backup provider succeeded", {
+            host: new URL(provider.base).host,
+            httpStatus: response.status
+          });
+          break;
+        }
+        lastStatus = response.status || 502;
+        lastMessage = candidate?.message || candidate?.error || `Routing provider returned HTTP ${lastStatus}.`;
+        console.warn("[maps-route] backup provider failed", {
+          host: new URL(provider.base).host,
+          httpStatus: lastStatus,
+          providerCode: candidate?.code || null,
+          message: String(lastMessage).slice(0, 240)
+        });
+      } catch (error) {
+        lastStatus = 502;
+        lastMessage = "Could not connect to a backup routing provider.";
+        console.warn("[maps-route] backup provider connection failed", {
+          host: new URL(provider.base).host,
+          error: String(error?.message || error).slice(0, 240)
+        });
       }
-    } catch (error) {
-      lastStatus = 502;
-      lastMessage = "Could not connect to a routing provider.";
-      console.warn("[maps-route] provider connection failed", {
-        host: new URL(provider.base).host,
-        error: String(error?.message || error).slice(0, 240)
-      });
     }
   }
 
