@@ -2901,6 +2901,136 @@
         transition-duration: 0.01ms !important;
       }
     }
+    /* Mobile ring-mouse mode: a scrollable, one-column layout with large pointer targets. */
+    .ring-mode-toggle {
+      min-height: 38px;
+      padding: 7px 10px;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .ring-mode-toggle[aria-pressed="true"] {
+      border-color: rgba(166, 215, 255, 0.75);
+      background: rgba(92, 169, 221, 0.22);
+      color: #fff;
+    }
+
+    @media (max-width: 900px) {
+      .top-right {
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .control,
+      .maps-zoom-btn,
+      .dock-app-btn,
+      .dock-core-btn,
+      .maps-search-result,
+      .youtube-search-result,
+      .spotify-search-result {
+        min-height: 44px;
+      }
+
+      input,
+      select,
+      textarea {
+        font-size: 16px;
+      }
+    }
+
+    .hud.ring-mouse-mode {
+      display: grid !important;
+      position: relative !important;
+      grid-template-columns: minmax(0, 1fr) !important;
+      grid-template-rows: auto !important;
+      grid-auto-rows: auto;
+      gap: 12px;
+      width: 100%;
+      min-height: 100dvh;
+      height: auto !important;
+      max-height: none !important;
+      overflow: visible !important;
+      padding:
+        max(12px, env(safe-area-inset-top))
+        max(12px, env(safe-area-inset-right))
+        max(18px, env(safe-area-inset-bottom))
+        max(12px, env(safe-area-inset-left));
+      touch-action: pan-y;
+    }
+
+    .hud.ring-mouse-mode .top-bar,
+    .hud.ring-mouse-mode .panel[data-widget] {
+      position: relative !important;
+      inset: auto !important;
+      grid-column: 1 / -1 !important;
+      grid-row: auto !important;
+      width: 100% !important;
+      min-width: 0 !important;
+      max-width: none !important;
+      height: auto !important;
+      max-height: none !important;
+      margin: 0 !important;
+      transform: none !important;
+      overflow: visible;
+    }
+
+    .hud.ring-mouse-mode .panel[data-widget="maps"] .maps-frame {
+      min-height: 280px;
+    }
+
+    .hud.ring-mouse-mode .panel[data-widget="maps"] .maps-canvas {
+      min-height: 280px;
+    }
+
+    .hud.ring-mouse-mode button,
+    .hud.ring-mouse-mode a,
+    .hud.ring-mouse-mode select,
+    .hud.ring-mouse-mode input,
+    .hud.ring-mouse-mode textarea,
+    .hud.ring-mouse-mode .maps-canvas,
+    .hud.ring-mouse-mode .progress-shell {
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .hud.ring-mouse-mode input,
+    .hud.ring-mouse-mode textarea {
+      cursor: text;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    .hud.ring-mouse-mode button,
+    .hud.ring-mouse-mode a,
+    .hud.ring-mouse-mode select,
+    .hud.ring-mouse-mode input,
+    .hud.ring-mouse-mode textarea,
+    .hud.ring-mouse-mode [tabindex]:not([tabindex="-1"]) {
+      outline-offset: 3px;
+    }
+
+    .hud.ring-mouse-mode :focus-visible {
+      outline: 2px solid var(--accent-nav);
+      box-shadow: 0 0 0 3px rgba(166, 215, 255, 0.16);
+    }
+
+    .hud.ring-mouse-mode .drag-handle {
+      min-height: 44px;
+      cursor: grab;
+      touch-action: none;
+    }
+
+    .hud.ring-mouse-mode .app-dock {
+      position: fixed;
+      z-index: 1000;
+    }
+
+    @media (min-width: 901px) {
+      .hud.ring-mouse-mode {
+        grid-template-columns: minmax(0, 1fr) !important;
+      }
+    }
+
   </style>
 </head>
 <body>
@@ -2914,6 +3044,7 @@
         <span id="hud-time">--:--</span>
         <span id="hud-link">Link --</span>
         <span id="hud-batt">Batt --%</span>
+        <button class="control ring-mode-toggle" type="button" id="ring-mode-toggle" aria-pressed="false" title="Optimize layout for mobile ring mouse">Ring Mouse: Off</button>
       </div>
     </header>
 
@@ -3153,6 +3284,8 @@
     const dragHandles = Array.from(document.querySelectorAll("[data-drag-for]"));
 
     const modeLabelEl = document.getElementById("hud-mode-label");
+    const ringModeToggleEl = document.getElementById("ring-mode-toggle");
+    const RING_MOUSE_MODE_KEY = "ar-hud-ring-mouse-mode-v1";
     const timeEl = document.getElementById("hud-time");
     const linkEl = document.getElementById("hud-link");
     const batteryEl = document.getElementById("hud-batt");
@@ -8834,6 +8967,46 @@
       }
     }
 
+    function setRingMouseMode(enabled, persist = true) {
+      const active = enabled === true;
+      hudEl?.classList.toggle("ring-mouse-mode", active);
+      if (ringModeToggleEl) {
+        ringModeToggleEl.setAttribute("aria-pressed", active ? "true" : "false");
+        ringModeToggleEl.textContent = active ? "Ring Mouse: On" : "Ring Mouse: Off";
+        ringModeToggleEl.title = active
+          ? "Turn off the mobile ring-mouse layout"
+          : "Use a scrollable mobile layout with larger pointer targets";
+      }
+      if (persist) {
+        try {
+          window.localStorage.setItem(RING_MOUSE_MODE_KEY, active ? "1" : "0");
+        } catch {
+          // Storage can be unavailable in private browsing; mode still works for this session.
+        }
+      }
+      window.requestAnimationFrame(() => {
+        applyWidgetLayout();
+        positionMapsSearchPanel();
+        positionYouTubeSearchPanel();
+        if (routeSession.active) {
+          renderMapsWidgetRoute(getCurrentMapRoute(), { fit: true });
+        }
+      });
+    }
+
+    function initRingMouseMode() {
+      let enabled = new URLSearchParams(window.location.search).get("ring") === "1";
+      try {
+        enabled = enabled || window.localStorage.getItem(RING_MOUSE_MODE_KEY) === "1";
+      } catch {
+        // Query parameter still allows ring-mouse mode when storage is unavailable.
+      }
+      setRingMouseMode(enabled, false);
+      ringModeToggleEl?.addEventListener("click", () => {
+        setRingMouseMode(!hudEl.classList.contains("ring-mouse-mode"));
+      });
+    }
+
     function initNativeBridge() {
       window.HUDNativeBridge = {
         setMode(mode) {
@@ -10118,6 +10291,7 @@
       positionDockAt(dockAnchor.x, dockAnchor.y);
     });
 
+    initRingMouseMode();
     activeWidgets = loadActiveWidgets();
     widgetPositions = loadWidgetPositions();
     widgetSizes = loadWidgetSizes();
