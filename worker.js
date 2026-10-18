@@ -547,7 +547,8 @@ async function handleMapsRoute(request, env) {
         costing: "pedestrian",
         units: "kilometers",
         language: "en-US",
-        format: "osrm"
+        format: "osrm",
+        shape_format: "geojson"
       })
     });
     const candidate = await safeJson(response);
