@@ -556,18 +556,33 @@ async function handleMapsRoute(request, env) {
       });
       const candidate = await safeJson(response);
       if (response.ok && candidate?.code === "Ok") {
+        console.log("[maps-route] provider succeeded", {
+          host: new URL(provider.base).host,
+          httpStatus: response.status,
+          routeCount: Array.isArray(candidate.routes) ? candidate.routes.length : 0
+        });
         payload = candidate;
         break;
       }
       lastStatus = response.status || 502;
       lastMessage = candidate?.message || candidate?.error || `Routing provider returned HTTP ${lastStatus}.`;
+      console.warn("[maps-route] provider failed", {
+        host: new URL(provider.base).host,
+        httpStatus: lastStatus,
+        providerCode: candidate?.code || null,
+        message: String(lastMessage).slice(0, 240)
+      });
       // Continue to the backup after blocked/rate-limited/server-error responses.
       if (response.status !== 403 && response.status !== 429 && response.status < 500) {
         break;
       }
-    } catch {
+    } catch (error) {
       lastStatus = 502;
       lastMessage = "Could not connect to a routing provider.";
+      console.warn("[maps-route] provider connection failed", {
+        host: new URL(provider.base).host,
+        error: String(error?.message || error).slice(0, 240)
+      });
     }
   }
 
