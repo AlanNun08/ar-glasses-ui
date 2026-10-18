@@ -599,6 +599,9 @@
       transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
     }
 
+    .voice-search-btn { min-height: 38px; white-space: nowrap; cursor: pointer; }
+    .voice-search-btn.listening { border-color: rgba(255, 147, 161, 0.8); background: rgba(255, 147, 161, 0.22); }
+
     .spotify-search-input:focus {
       border-color: rgba(166, 215, 255, 0.36);
       background: rgba(0, 0, 0, 0.22);
@@ -3069,6 +3072,7 @@
       <div class="spotify-search-row">
         <input id="spotify-search-input" class="spotify-search-input" type="search" autocomplete="off" placeholder="Search songs or artists" />
         <button class="control spotify-search-btn" type="button" id="spotify-search-btn" disabled>Search</button>
+        <button class="control voice-search-btn" type="button" id="spotify-voice-btn" aria-label="Voice search Spotify" title="Search Spotify by voice">🎙</button>
       </div>
       <p class="spotify-hint" id="app-hint">Tap play once to start audio/video.</p>
     </section>
@@ -3087,6 +3091,7 @@
         <div class="maps-search-row">
           <input id="maps-search-input" class="spotify-search-input" type="search" autocomplete="off" placeholder="Search destination to see nearby matches" />
           <button class="control" type="button" id="maps-search-btn">Route</button>
+          <button class="control voice-search-btn" type="button" id="maps-voice-btn" aria-label="Voice search destinations" title="Search destinations by voice">🎙</button>
         </div>
         <div class="maps-route-status" id="maps-route-status">Choose a preset or search a destination.</div>
       </div>
@@ -3149,6 +3154,7 @@
       </div>
       <div class="youtube-search-row">
         <input id="youtube-search-input" class="spotify-search-input" type="search" autocomplete="off" placeholder="Search YouTube videos and view matches in the popup" />
+        <button class="control voice-search-btn" type="button" id="youtube-voice-btn" aria-label="Voice search YouTube" title="Search YouTube by voice">🎙 Voice</button>
       </div>
       <div class="video-actions">
         <button class="control" type="button" id="youtube-open-btn">Open YouTube</button>
@@ -8994,6 +9000,61 @@
       });
     }
 
+    function attachVoiceSearch(buttonId, inputEl, onResult, statusEl = null) {
+      const button = document.getElementById(buttonId);
+      if (!button) return;
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        button.title = "Voice search is not supported in this browser. Try Chrome on Android or Safari with dictation enabled.";
+        button.addEventListener("click", () => {
+          if (statusEl) statusEl.textContent = "Voice search is not supported by this browser. Try Chrome on Android or use your keyboard's microphone.";
+          else window.alert("Voice search is not supported by this browser. Try Chrome on Android or use your keyboard's microphone.");
+        });
+        return;
+      }
+      let recognition = null;
+      button.addEventListener("click", () => {
+        if (recognition) { try { recognition.stop(); } catch {} return; }
+        recognition = new SpeechRecognition();
+        recognition.lang = navigator.language || "en-US";
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+        button.classList.add("listening");
+        button.textContent = "Listening…";
+        if (statusEl) statusEl.textContent = "Listening for your search…";
+        recognition.onresult = (event) => {
+          const transcript = event.results?.[0]?.[0]?.transcript?.trim();
+          if (!transcript) return;
+          inputEl.value = transcript;
+          inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+          onResult();
+        };
+        recognition.onerror = (event) => {
+          if (statusEl) statusEl.textContent = event.error === "not-allowed"
+            ? "Allow microphone access in your browser settings, then try again."
+            : "Couldn't hear that. Tap the microphone and try again.";
+        };
+        recognition.onend = () => {
+          recognition = null;
+          button.classList.remove("listening");
+          button.textContent = buttonId === "youtube-voice-btn" ? "🎙 Voice" : "🎙";
+        };
+        try { recognition.start(); }
+        catch {
+          recognition = null;
+          button.classList.remove("listening");
+          button.textContent = buttonId === "youtube-voice-btn" ? "🎙 Voice" : "🎙";
+          if (statusEl) statusEl.textContent = "Couldn't start the microphone. Check browser permissions.";
+        }
+      });
+    }
+
+    function initVoiceSearch() {
+      attachVoiceSearch("maps-voice-btn", mapsSearchInputEl, runMapsDestinationSearch, mapsRouteStatusEl);
+      attachVoiceSearch("spotify-voice-btn", spotifySearchInputEl, runSpotifySearch, document.getElementById("app-hint"));
+      attachVoiceSearch("youtube-voice-btn", youtubeSearchInputEl, runYouTubeSearch, youtubeChannelEl);
+    }
+
     function initRingMouseMode() {
       let enabled = new URLSearchParams(window.location.search).get("ring") === "1";
       try {
@@ -10291,6 +10352,7 @@
       positionDockAt(dockAnchor.x, dockAnchor.y);
     });
 
+    initVoiceSearch();
     initRingMouseMode();
     activeWidgets = loadActiveWidgets();
     widgetPositions = loadWidgetPositions();
