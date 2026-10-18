@@ -16,6 +16,10 @@ The goal is to explore a practical, customizable HUD for walking and daily use:
 
 ## What the website does
 
+### Mobile and ring-mouse mode
+
+On a phone or small touch display, select **Ring Mouse: On** in the top bar to switch to a scrollable, single-column layout with larger controls and visible keyboard/pointer focus. The setting is saved locally in the browser. You can also open the site with `?ring=1` to enable the mode on first load. This mode is intended for Bluetooth ring mice that present themselves to the device as a standard pointer/mouse; exact gesture behavior depends on the ring and the phone/OS pairing settings.
+
 ### HUD and widgets
 
 The page presents a futuristic, glass-style interface with configurable widgets and an app dock. Widget layout and display modes are intended to make the interface usable across different screen sizes and portrait/landscape setups.
