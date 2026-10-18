@@ -4446,21 +4446,32 @@
         // Keep the user moving when the in-HUD routing provider is unavailable.
         // This link is created only after the user selects a destination.
         if (mapsRouteStatusEl && routeOriginHasFix) {
-          const fallbackUrl = new URL("https://www.google.com/maps/dir/");
-          fallbackUrl.searchParams.set("api", "1");
-          fallbackUrl.searchParams.set("origin", `${routeOrigin.lat},${routeOrigin.lon}`);
-          fallbackUrl.searchParams.set("destination", `${result.lat},${result.lon}`);
-          fallbackUrl.searchParams.set("travelmode", "walking");
-          const link = document.createElement("a");
-          link.href = fallbackUrl.toString();
-          link.target = "_blank";
-          link.rel = "noopener noreferrer";
-          link.textContent = " Open walking directions in Google Maps";
-          link.style.display = "inline-block";
-          link.style.marginTop = "6px";
-          link.style.textDecoration = "underline";
-          mapsRouteStatusEl.appendChild(document.createTextNode(" "));
-          mapsRouteStatusEl.appendChild(link);
+          const googleMapsUrl = new URL("https://www.google.com/maps/dir/");
+          googleMapsUrl.searchParams.set("api", "1");
+          googleMapsUrl.searchParams.set("origin", `${routeOrigin.lat},${routeOrigin.lon}`);
+          googleMapsUrl.searchParams.set("destination", `${result.lat},${result.lon}`);
+          googleMapsUrl.searchParams.set("travelmode", "walking");
+
+          const osmUrl = new URL("https://www.openstreetmap.org/directions");
+          osmUrl.searchParams.set("engine", "fossgis_osrm_foot");
+          osmUrl.searchParams.set("route", `${routeOrigin.lat},${routeOrigin.lon};${result.lat},${result.lon}`);
+
+          const appendDirectionsLink = (url, label) => {
+            const link = document.createElement("a");
+            link.href = url.toString();
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            link.textContent = label;
+            link.style.display = "inline-block";
+            link.style.marginTop = "6px";
+            link.style.marginRight = "10px";
+            link.style.textDecoration = "underline";
+            mapsRouteStatusEl.appendChild(document.createTextNode(" "));
+            mapsRouteStatusEl.appendChild(link);
+          };
+
+          appendDirectionsLink(googleMapsUrl, "Open walking directions in Google Maps");
+          appendDirectionsLink(osmUrl, "Try OpenStreetMap directions");
         }
       }
     }
