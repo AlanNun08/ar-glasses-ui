@@ -3146,7 +3146,7 @@
       <div class="video-frame">
         <iframe
           id="youtube-embed"
-          src="https://www.youtube.com/embed/jfKfPfyJRdk?rel=0&playsinline=1&autoplay=1&mute=1&controls=1&modestbranding=1"
+          src="https://www.youtube.com/embed/jfKfPfyJRdk?rel=0&playsinline=1&autoplay=0&mute=0&controls=1&modestbranding=1"
           loading="lazy"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen; web-share"
           allowfullscreen
@@ -3727,8 +3727,8 @@
         const embedUrl = new URL(`https://www.youtube.com/embed/${videoId}`);
         embedUrl.searchParams.set("rel", "0");
         embedUrl.searchParams.set("playsinline", "1");
-        embedUrl.searchParams.set("autoplay", "1");
-        embedUrl.searchParams.set("mute", "1");
+        embedUrl.searchParams.set("autoplay", "0");
+        embedUrl.searchParams.set("mute", "0");
         embedUrl.searchParams.set("controls", "1");
         embedUrl.searchParams.set("modestbranding", "1");
         if (window.location.protocol !== "file:" && window.location.origin && window.location.origin !== "null") {
