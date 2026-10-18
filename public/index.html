@@ -4508,10 +4508,28 @@
 
     async function ensureRouteOrigin() {
       if (!("geolocation" in navigator)) {
+        routeOriginHasFix = false;
         syncRouteOriginDisplays();
         return routeOrigin;
       }
+      // Reuse a recent fix to avoid repeatedly triggering slow mobile GPS prompts.
+      if (routeOriginHasFix && Number.isFinite(routeOrigin?.lat) && Number.isFinite(routeOrigin?.lon)) {
+        return routeOrigin;
+      }
       return new Promise((resolve) => {
+        let settled = false;
+        const finish = (value) => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(fallbackTimer);
+          resolve(value);
+        };
+        const fallbackTimer = window.setTimeout(() => {
+          routeOriginHasFix = false;
+          syncRouteOriginDisplays();
+          setMapsRouteStatus("Location timed out. Check phone location services and browser permission, then tap Route again.");
+          finish(routeOrigin);
+        }, 12000);
         navigator.geolocation.getCurrentPosition(
           (position) => {
             routeOrigin = {
@@ -4521,22 +4539,25 @@
             };
             routeOriginHasFix = true;
             syncRouteOriginDisplays();
-            if (!routeSession.active) {
-              renderMapsIdleView(true);
-            } else {
-              scheduleMapsViewportSync(true);
-            }
-            resolve(routeOrigin);
+            if (!routeSession.active) renderMapsIdleView(true);
+            else scheduleMapsViewportSync(true);
+            finish(routeOrigin);
           },
-          () => {
+          (error) => {
             routeOriginHasFix = false;
             syncRouteOriginDisplays();
-            resolve(routeOrigin);
+            const message = error?.code === 1
+              ? "Location permission denied. Allow location access for this site in your phone's browser settings."
+              : error?.code === 2
+                ? "Phone couldn't determine your location. Turn on Location Services and try outdoors or near a window."
+                : "Location timed out. Check phone location services and browser permission, then try again.";
+            setMapsRouteStatus(message);
+            finish(routeOrigin);
           },
           {
-            enableHighAccuracy: true,
-            maximumAge: 60000,
-            timeout: 5000
+            enableHighAccuracy: false,
+            maximumAge: 120000,
+            timeout: 10000
           }
         );
       });
