@@ -9013,38 +9013,70 @@
         return;
       }
       let recognition = null;
+      let safetyTimeout = null;
+      const defaultLabel = buttonId === "youtube-voice-btn" ? "🎙 Voice" : "🎙";
+      const resetVoiceButton = () => {
+        if (safetyTimeout) window.clearTimeout(safetyTimeout);
+        safetyTimeout = null;
+        button.classList.remove("listening");
+        button.textContent = defaultLabel;
+        recognition = null;
+      };
       button.addEventListener("click", () => {
-        if (recognition) { try { recognition.stop(); } catch {} return; }
-        recognition = new SpeechRecognition();
-        recognition.lang = navigator.language || "en-US";
-        recognition.interimResults = false;
-        recognition.maxAlternatives = 1;
-        button.classList.add("listening");
-        button.textContent = "Listening…";
-        if (statusEl) statusEl.textContent = "Listening for your search…";
-        recognition.onresult = (event) => {
-          const transcript = event.results?.[0]?.[0]?.transcript?.trim();
-          if (!transcript) return;
-          inputEl.value = transcript;
-          inputEl.dispatchEvent(new Event("input", { bubbles: true }));
-          onResult();
-        };
-        recognition.onerror = (event) => {
-          if (statusEl) statusEl.textContent = event.error === "not-allowed"
-            ? "Allow microphone access in your browser settings, then try again."
-            : "Couldn't hear that. Tap the microphone and try again.";
-        };
-        recognition.onend = () => {
-          recognition = null;
-          button.classList.remove("listening");
-          button.textContent = buttonId === "youtube-voice-btn" ? "🎙 Voice" : "🎙";
-        };
-        try { recognition.start(); }
-        catch {
-          recognition = null;
-          button.classList.remove("listening");
-          button.textContent = buttonId === "youtube-voice-btn" ? "🎙 Voice" : "🎙";
-          if (statusEl) statusEl.textContent = "Couldn't start the microphone. Check browser permissions.";
+        if (recognition) {
+          const current = recognition;
+          resetVoiceButton();
+          try { current.abort(); } catch {}
+          if (statusEl) statusEl.textContent = "Voice search stopped.";
+          return;
+        }
+        try {
+          recognition = new SpeechRecognition();
+          const current = recognition;
+          current.lang = navigator.language || "en-US";
+          current.interimResults = false;
+          current.maxAlternatives = 1;
+          button.classList.add("listening");
+          button.textContent = "Stop";
+          if (statusEl) statusEl.textContent = "Listening… say your search, then pause.";
+          safetyTimeout = window.setTimeout(() => {
+            if (recognition !== current) return;
+            try { current.stop(); } catch {}
+            resetVoiceButton();
+            if (statusEl) statusEl.textContent = "Voice search timed out. Tap the microphone and try again.";
+          }, 12000);
+          current.onresult = (event) => {
+            const transcript = event.results?.[0]?.[0]?.transcript?.trim();
+            if (!transcript) {
+              if (statusEl) statusEl.textContent = "I didn't catch that. Tap the microphone and try again.";
+              return;
+            }
+            inputEl.value = transcript;
+            inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+            if (statusEl) statusEl.textContent = "Heard: " + transcript;
+            try { onResult(); } catch (error) {
+              if (statusEl) statusEl.textContent = error?.message || "Search failed. Please try again.";
+            }
+          };
+          current.onerror = (event) => {
+            const message = event.error === "not-allowed" || event.error === "service-not-allowed"
+              ? "Microphone permission is blocked. Allow it for this site in browser settings."
+              : event.error === "audio-capture"
+                ? "No microphone was found. Check your phone or ring setup."
+                : event.error === "no-speech"
+                  ? "No speech detected. Tap the microphone and speak after it starts listening."
+                  : "Voice search error (" + (event.error || "unknown") + "). Tap to try again.";
+            if (statusEl) statusEl.textContent = message;
+            resetVoiceButton();
+            try { current.abort(); } catch {}
+          };
+          current.onend = () => {
+            if (recognition === current) resetVoiceButton();
+          };
+          current.start();
+        } catch {
+          resetVoiceButton();
+          if (statusEl) statusEl.textContent = "Couldn't start voice search. Check microphone permission and try again.";
         }
       });
     }
