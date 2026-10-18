@@ -579,7 +579,7 @@ async function handleMapsRoute(request, env) {
   // Retain the existing public OSRM providers as backups.
   if (!payload) {
     const configuredRouteBase = typeof env.OSRM_BASE_URL === "string" && env.OSRM_BASE_URL.trim()
-      ? env.OSRM_BASE_URL.trim().replace(/\\/+$/, "")
+      ? env.OSRM_BASE_URL.trim().replace(/\/+$/, "")
       : OSRM_ROUTE_BASE;
     const providers = [
       { base: configuredRouteBase, profile: "driving" },
